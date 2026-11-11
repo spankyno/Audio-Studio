@@ -1,0 +1,22 @@
+{
+  "name": "Audio Studio — Editor de Audio Online Profesional",
+  "short_name": "Audio Studio",
+  "description": "Estación de trabajo y edición de audio digital profesional en el navegador. Edición multipista, rack de 11 efectos, ecualizador gráfico y exportación multiformato.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/og-image.png",
+      "sizes": "1200x675",
+      "type": "image/png"
+    }
+  ]
+}
