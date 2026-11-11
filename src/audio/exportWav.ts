@@ -150,14 +150,18 @@ export async function resampleAudioBuffer(
 }
 
 /**
- * Trigger browser file download for a given Blob
+ * Trigger browser file download for a given Blob with secure filename sanitization
  */
 export function downloadBlob(blob: Blob, fileName: string) {
+  const sanitized = fileName
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .replace(/^\.+/, '')
+    .trim() || 'audio_export';
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.style.display = 'none';
   a.href = url;
-  a.download = fileName;
+  a.download = sanitized;
   document.body.appendChild(a);
   a.click();
   setTimeout(() => {

@@ -66,27 +66,48 @@ export function serializeTracks(tracks: AudioTrack[]): SerializedTrack[] {
 export function deserializeTracks(serialized: SerializedTrack[]): AudioTrack[] {
   const ctx = getAudioContext();
 
-  return serialized.map(s => {
+  return serialized.map((s, idx) => {
     let buffer: AudioBuffer | null = null;
 
     if (s.channels && s.channels.length > 0 && s.length > 0) {
-      buffer = ctx.createBuffer(s.numberOfChannels, s.length, s.sampleRate);
-      for (let c = 0; c < s.numberOfChannels; c++) {
+      const numChannels = typeof s.numberOfChannels === 'number' && Number.isInteger(s.numberOfChannels)
+        ? Math.max(1, Math.min(8, s.numberOfChannels))
+        : 2;
+      const sampleRate = typeof s.sampleRate === 'number' && Number.isInteger(s.sampleRate)
+        ? Math.max(8000, Math.min(192000, s.sampleRate))
+        : 44100;
+      const maxSamples = sampleRate * 3600;
+      const length = typeof s.length === 'number' && Number.isInteger(s.length)
+        ? Math.max(1, Math.min(maxSamples, s.length))
+        : 1;
+
+      buffer = ctx.createBuffer(numChannels, length, sampleRate);
+      for (let c = 0; c < numChannels; c++) {
         if (s.channels[c]) {
           buffer.getChannelData(c).set(s.channels[c]);
         }
       }
     }
 
+    const safeVolume = typeof s.volume === 'number' && Number.isFinite(s.volume)
+      ? Math.max(0, Math.min(2, s.volume))
+      : 1.0;
+    const safePan = typeof s.pan === 'number' && Number.isFinite(s.pan)
+      ? Math.max(-1, Math.min(1, s.pan))
+      : 0;
+    const safeStartTime = typeof s.startTime === 'number' && Number.isFinite(s.startTime)
+      ? Math.max(0, Math.min(86400, s.startTime))
+      : 0;
+
     return {
-      id: s.id,
-      name: s.name,
-      color: s.color,
-      volume: s.volume,
-      pan: s.pan,
-      mute: s.mute,
-      solo: s.solo,
-      startTime: s.startTime,
+      id: typeof s.id === 'string' ? s.id.slice(0, 50) : `track-${Date.now()}-${idx}`,
+      name: typeof s.name === 'string' ? s.name.slice(0, 80) : `Pista ${idx + 1}`,
+      color: typeof s.color === 'string' ? s.color : '#f59e0b',
+      volume: safeVolume,
+      pan: safePan,
+      mute: Boolean(s.mute),
+      solo: Boolean(s.solo),
+      startTime: safeStartTime,
       buffer,
     };
   });

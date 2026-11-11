@@ -314,16 +314,24 @@ export default function App() {
     }
   };
 
-  // Audio Import (File input or Drag and Drop)
+  // Audio Import (File input or Drag and Drop) with file size & name validation
   const handleImportFiles = async (files: FileList | File[]) => {
     const ctx = getAudioContext();
+    const maxFileSize = 250 * 1024 * 1024; // 250 MB max per audio file
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      if (file.size > maxFileSize) {
+        console.warn('El archivo excede el tamaño máximo permitido de 250 MB:', file.name);
+        continue;
+      }
       try {
         const arrayBuffer = await file.arrayBuffer();
         const decodedBuffer = await ctx.decodeAudioData(arrayBuffer);
-        const trackName = file.name.replace(/\.[^/.]+$/, '');
-        handleAddTrack(decodedBuffer, trackName);
+        const safeName = (file.name || 'Pista importada')
+          .replace(/\.[^/.]+$/, '')
+          .slice(0, 80)
+          .trim() || 'Pista importada';
+        handleAddTrack(decodedBuffer, safeName);
       } catch (err) {
         console.error('Error importing file:', err);
       }
@@ -702,43 +710,93 @@ export default function App() {
   };
 
   const handleImportProjectFile = async (file: File) => {
+    // 1. File size sanity check (max 100 MB for JSON)
+    if (file.size > 100 * 1024 * 1024) {
+      console.warn('El archivo de proyecto excede el tamaño máximo de 100 MB');
+      return;
+    }
+
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      if (data && data.tracks) {
+      if (data && typeof data === 'object' && Array.isArray(data.tracks)) {
         playbackEngine.stop();
         setIsPlaying(false);
 
         const ctx = getAudioContext();
-        const importedTracks: AudioTrack[] = data.tracks.map((t: any) => {
+        const importedTracks: AudioTrack[] = [];
+
+        for (let i = 0; i < Math.min(data.tracks.length, 32); i++) {
+          const t = data.tracks[i];
+          if (!t || typeof t !== 'object') continue;
+
           let buffer: AudioBuffer | null = null;
-          if (t.channels && t.channels.length > 0 && t.length > 0) {
-            buffer = ctx.createBuffer(t.numberOfChannels, t.length, t.sampleRate);
-            for (let c = 0; c < t.numberOfChannels; c++) {
-              if (t.channels[c]) {
-                buffer.getChannelData(c).set(t.channels[c]);
+          const numChannels = typeof t.numberOfChannels === 'number' && Number.isInteger(t.numberOfChannels)
+            ? Math.max(1, Math.min(8, t.numberOfChannels))
+            : 2;
+          const sampleRate = typeof t.sampleRate === 'number' && Number.isInteger(t.sampleRate)
+            ? Math.max(8000, Math.min(192000, t.sampleRate))
+            : 44100;
+          const maxSamples = sampleRate * 3600; // max 1 hour per track
+          const length = typeof t.length === 'number' && Number.isInteger(t.length)
+            ? Math.max(0, Math.min(maxSamples, t.length))
+            : 0;
+
+          if (Array.isArray(t.channels) && t.channels.length > 0 && length > 0) {
+            buffer = ctx.createBuffer(numChannels, length, sampleRate);
+            for (let c = 0; c < numChannels; c++) {
+              if (Array.isArray(t.channels[c]) || ArrayBuffer.isView(t.channels[c])) {
+                const channelData = buffer.getChannelData(c);
+                const src = t.channels[c];
+                const copyLen = Math.min(length, src.length);
+                for (let k = 0; k < copyLen; k++) {
+                  const val = Number(src[k]);
+                  channelData[k] = Number.isFinite(val) ? Math.max(-1, Math.min(1, val)) : 0;
+                }
               }
             }
           }
-          return {
-            id: t.id,
-            name: t.name,
-            color: t.color,
-            volume: t.volume,
-            pan: t.pan,
-            mute: t.mute,
-            solo: t.solo,
-            startTime: t.startTime,
-            buffer,
-          };
-        });
 
-        setProjectId(data.id || 'proj-' + Date.now());
-        setProjectName(data.name || 'Proyecto Importado');
+          const safeVolume = typeof t.volume === 'number' && Number.isFinite(t.volume)
+            ? Math.max(0, Math.min(2, t.volume))
+            : 1.0;
+          const safePan = typeof t.pan === 'number' && Number.isFinite(t.pan)
+            ? Math.max(-1, Math.min(1, t.pan))
+            : 0;
+          const safeStartTime = typeof t.startTime === 'number' && Number.isFinite(t.startTime)
+            ? Math.max(0, Math.min(86400, t.startTime))
+            : 0;
+          const safeName = typeof t.name === 'string'
+            ? t.name.slice(0, 80).trim() || `Pista ${i + 1}`
+            : `Pista ${i + 1}`;
+          const safeColor = typeof t.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(t.color)
+            ? t.color
+            : TRACK_COLORS[i % TRACK_COLORS.length];
+
+          importedTracks.push({
+            id: typeof t.id === 'string' ? t.id.slice(0, 50) : `track-${Date.now()}-${i}`,
+            name: safeName,
+            color: safeColor,
+            volume: safeVolume,
+            pan: safePan,
+            mute: Boolean(t.mute),
+            solo: Boolean(t.solo),
+            startTime: safeStartTime,
+            buffer,
+          });
+        }
+
+        if (importedTracks.length === 0) return;
+
+        const safeProjectId = typeof data.id === 'string' ? data.id.slice(0, 50) : 'proj-' + Date.now();
+        const safeProjectName = typeof data.name === 'string' ? data.name.slice(0, 100).trim() || 'Proyecto Importado' : 'Proyecto Importado';
+
+        setProjectId(safeProjectId);
+        setProjectName(safeProjectName);
         setTracks(importedTracks);
         setActiveTrackId(importedTracks[0]?.id || '');
-        if (data.effects) setEffects(data.effects);
-        if (data.eqBands) setEqBands(data.eqBands);
+        if (Array.isArray(data.effects)) setEffects(data.effects);
+        if (Array.isArray(data.eqBands)) setEqBands(data.eqBands);
         setSelection(null);
         setCurrentTime(0);
         pushHistory(importedTracks);
