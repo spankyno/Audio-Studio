@@ -7,7 +7,6 @@ export function getAudioContext(): AudioContext {
     const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     sharedAudioContext = new AudioContextClass({
       latencyHint: 'interactive',
-      sampleRate: 44100,
     });
   }
   if (sharedAudioContext.state === 'suspended') {
@@ -66,7 +65,7 @@ class PlaybackEngine {
     return this.isPlaying;
   }
 
-  public play(
+  public async play(
     tracks: AudioTrack[],
     fromTime: number,
     totalDuration: number,
@@ -77,6 +76,14 @@ class PlaybackEngine {
     this.stop();
 
     if (tracks.length === 0 || totalDuration <= 0) return;
+
+    if (ctx.state === 'suspended') {
+      try {
+        await ctx.resume();
+      } catch (e) {
+        console.error('AudioContext resume error:', e);
+      }
+    }
 
     // Store for potential loop restart
     this.lastTracks = tracks;
@@ -131,6 +138,9 @@ class PlaybackEngine {
       // Track Pan and Volume
       const trackGain = ctx.createGain();
       trackGain.gain.setValueAtTime(track.volume, ctx.currentTime);
+
+      // Connect buffer source to track gain
+      trackSource.connect(trackGain);
 
       let lastNode: AudioNode = trackGain;
 

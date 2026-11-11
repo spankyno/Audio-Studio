@@ -146,6 +146,7 @@ export default function App() {
     },
     onEnded: () => {
       setIsPlaying(false);
+      setCurrentTime(selection ? selection.start : 0);
       setLevelL(0);
       setLevelR(0);
     },
@@ -161,7 +162,11 @@ export default function App() {
       playbackEngine.stop();
       setIsPlaying(false);
     } else {
-      const startFrom = selection ? selection.start : currentTime;
+      let startFrom = selection ? selection.start : currentTime;
+      if (!selection && totalDuration > 0 && startFrom >= totalDuration - 0.05) {
+        startFrom = 0;
+        setCurrentTime(0);
+      }
       playbackEngine.setMasterVolume(masterVolume);
       playbackEngine.setLoop(loop);
       playbackEngine.play(
@@ -185,11 +190,16 @@ export default function App() {
 
   const handlePlayFromCursor = () => {
     playbackEngine.stop();
+    let startFrom = currentTime;
+    if (totalDuration > 0 && startFrom >= totalDuration - 0.05) {
+      startFrom = 0;
+      setCurrentTime(0);
+    }
     playbackEngine.setMasterVolume(masterVolume);
     playbackEngine.setLoop(loop);
     playbackEngine.play(
       tracks,
-      currentTime,
+      startFrom,
       totalDuration,
       playbackListeners.current,
       null

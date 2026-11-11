@@ -947,6 +947,8 @@ export async function mixDownTracks(
     const gain = offlineCtx.createGain();
     gain.gain.setValueAtTime(track.volume, 0);
 
+    source.connect(gain);
+
     let lastNode: AudioNode = gain;
 
     if (offlineCtx.createStereoPanner) {
