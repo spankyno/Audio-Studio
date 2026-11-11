@@ -1,0 +1,6 @@
+{
+  "name": "Audio Studio",
+  "description": "Editor de audio online moderno, intuitivo y profesional con Web Audio API, edición multipista, efectos en tiempo real, ecualizador gráfico y exportación multiformato.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
